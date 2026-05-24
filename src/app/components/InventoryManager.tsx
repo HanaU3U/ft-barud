@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Product } from '../App';
+import { productosApi, ProductoTipo } from '../../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -23,24 +24,34 @@ export function InventoryManager({ products, setProducts }: InventoryManagerProp
     stock: 0,
   });
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!formData.name || !formData.category || formData.price <= 0) {
       toast.error('Completa todos los campos correctamente');
       return;
     }
 
-    const newProduct: Product = {
-      id: Date.now(),
-      name: formData.name,
-      category: formData.category,
-      price: formData.price,
-      stock: formData.stock,
-    };
-
-    setProducts([...products, newProduct]);
-    setFormData({ name: '', category: '', price: 0, stock: 0 });
-    setIsAdding(false);
-    toast.success('Producto agregado');
+    try {
+      const created = await productosApi.crear({
+        nombre: formData.name,
+        tipo: formData.category as ProductoTipo,
+        precio: formData.price,
+        stock: formData.stock,
+      });
+      const newProduct: Product = {
+        id: created.idProducto,
+        name: created.nombre,
+        category: created.tipo,
+        price: created.precio,
+        stock: created.stock,
+        active: true,
+      };
+      setProducts([...products, newProduct]);
+      setFormData({ name: '', category: '', price: 0, stock: 0 });
+      setIsAdding(false);
+      toast.success('Producto agregado');
+    } catch (e) {
+      toast.error('Error al agregar producto');
+    }
   };
 
   const handleEdit = (product: Product) => {
@@ -53,20 +64,30 @@ export function InventoryManager({ products, setProducts }: InventoryManagerProp
     });
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!formData.name || !formData.category || formData.price <= 0) {
       toast.error('Completa todos los campos correctamente');
       return;
     }
 
-    setProducts(products.map(p =>
-      p.id === editingId
-        ? { ...p, ...formData }
-        : p
-    ));
-    setEditingId(null);
-    setFormData({ name: '', category: '', price: 0, stock: 0 });
-    toast.success('Producto actualizado');
+    try {
+      const updated = await productosApi.actualizar(editingId!, {
+        nombre: formData.name,
+        tipo: formData.category as ProductoTipo,
+        precio: formData.price,
+        stock: formData.stock,
+      });
+      setProducts(products.map(p =>
+        p.id === editingId
+          ? { ...p, name: updated.nombre, category: updated.tipo, price: updated.precio, stock: updated.stock }
+          : p
+      ));
+      setEditingId(null);
+      setFormData({ name: '', category: '', price: 0, stock: 0 });
+      toast.success('Producto actualizado');
+    } catch (e) {
+      toast.error('Error al actualizar producto');
+    }
   };
 
   const handleDelete = (id: number) => {
@@ -74,13 +95,26 @@ export function InventoryManager({ products, setProducts }: InventoryManagerProp
     toast.success('Producto eliminado');
   };
 
-  const handleAddStock = (id: number, quantity: number) => {
-    setProducts(products.map(p =>
-      p.id === id
-        ? { ...p, stock: p.stock + quantity }
-        : p
-    ));
-    toast.success(`Stock actualizado: +${quantity}`);
+  const handleAddStock = async (id: number, quantity: number) => {
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+
+    try {
+      await productosApi.actualizar(id, {
+        nombre: product.name,
+        tipo: product.category as ProductoTipo,
+        precio: product.price,
+        stock: product.stock + quantity,
+      });
+      setProducts(products.map(p =>
+        p.id === id
+          ? { ...p, stock: p.stock + quantity }
+          : p
+      ));
+      toast.success(`Stock actualizado: +${quantity}`);
+    } catch (e) {
+      toast.error('Error al actualizar stock');
+    }
   };
 
   const getStockStatus = (stock: number) => {

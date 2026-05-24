@@ -128,8 +128,6 @@ export default function App() {
           />
         ) : currentRole === 'supplier' ? (
           <SupplierModule
-            products={products}
-            setProducts={setProducts}
             onLogout={handleLogout}
           />
         ) : currentRole === 'admin' ? (

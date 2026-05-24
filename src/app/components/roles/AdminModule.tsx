@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Table, Waiter, Product, Order, Invoice } from '../../App';
+import { empleadosApi, EmpleadoRol, EmpleadoEstado, vistasApi, BebidaAlcoholicaMasVendidaViewDto, ComidaNoPedidaViewDto, DetalleCuentaMesaViewDto, IngresosDiaSemanaViewDto, ProductosMasVendidosViewDto, PedidosPorDiaViewDto, DetallePedidoCompletoViewDto, PedidosMeseroViewDto } from '../../../services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -19,6 +20,7 @@ import {
   Save,
   X,
   AlertTriangle,
+  Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -53,6 +55,62 @@ export function AdminModule({
     email: '',
     phone: '',
   });
+
+  const [isAddingEmployee, setIsAddingEmployee] = useState(false);
+  const [newEmployeeForm, setNewEmployeeForm] = useState({
+    nombre: '',
+    rol: 'Mesero' as EmpleadoRol,
+    fechaIngreso: new Date().toISOString().split('T')[0],
+    estado: 'Activo' as EmpleadoEstado,
+  });
+
+  const [bebidasMasVendidas, setBebidasMasVendidas] = useState<BebidaAlcoholicaMasVendidaViewDto[]>([]);
+  const [comidasNoPedidas, setComidasNoPedidas] = useState<ComidaNoPedidaViewDto[]>([]);
+  const [detalleCuentaMesa, setDetalleCuentaMesa] = useState<DetalleCuentaMesaViewDto[]>([]);
+  const [ingresosDiaSemana, setIngresosDiaSemana] = useState<IngresosDiaSemanaViewDto[]>([]);
+  const [productosMasVendidos, setProductosMasVendidos] = useState<ProductosMasVendidosViewDto[]>([]);
+  const [pedidosPorDia, setPedidosPorDia] = useState<PedidosPorDiaViewDto[]>([]);
+  const [detallePedidoCompleto, setDetallePedidoCompleto] = useState<DetallePedidoCompletoViewDto[]>([]);
+  const [pedidosActivos, setPedidosActivos] = useState<PedidosMeseroViewDto[]>([]);
+  const [selectedMesaForDetalle, setSelectedMesaForDetalle] = useState<number | null>(null);
+
+  useEffect(() => {
+    vistasApi.bebidasAlcoholicasMasVendidas().then(setBebidasMasVendidas).catch(() => {});
+    vistasApi.comidasNoPedidas().then(setComidasNoPedidas).catch(() => {});
+    vistasApi.detalleCuentaMesa().then(setDetalleCuentaMesa).catch(() => {});
+    vistasApi.ingresosDiaSemana().then(setIngresosDiaSemana).catch(() => {});
+    vistasApi.productosMasVendidos().then(setProductosMasVendidos).catch(() => {});
+    vistasApi.pedidosPorDia().then(setPedidosPorDia).catch(() => {});
+    vistasApi.detallePedidoCompleto().then(setDetallePedidoCompleto).catch(() => {});
+    vistasApi.pedidosActivos().then(setPedidosActivos).catch(() => {});
+  }, []);
+
+  const handleAddEmployee = async () => {
+    if (!newEmployeeForm.nombre) {
+      toast.error('El nombre es requerido');
+      return;
+    }
+    try {
+      const created = await empleadosApi.crear({
+        nombre: newEmployeeForm.nombre,
+        rol: newEmployeeForm.rol,
+        fechaIngreso: newEmployeeForm.fechaIngreso,
+        estado: newEmployeeForm.estado,
+      });
+      const newWaiter: Waiter = {
+        id: created.idEmpleado,
+        name: created.nombre,
+        active: created.estado === 'Activo',
+        hireDate: created.fechaIngreso,
+      };
+      setWaiters([...waiters, newWaiter]);
+      setIsAddingEmployee(false);
+      setNewEmployeeForm({ nombre: '', rol: 'Mesero', fechaIngreso: new Date().toISOString().split('T')[0], estado: 'Activo' });
+      toast.success('Empleado agregado');
+    } catch (e) {
+      toast.error('Error al agregar empleado');
+    }
+  };
 
   const today = new Date().toDateString();
   const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString() === today);
@@ -160,8 +218,9 @@ export function AdminModule({
 
           <TabsContent value="reports">
             <div className="space-y-6">
-              <h2>Reporte del Día</h2>
+              <h2>Reportes</h2>
 
+              {/* Summary cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -169,184 +228,273 @@ export function AdminModule({
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
+                    <div className="text-2xl font-bold">
+                      ${ingresosDiaSemana.reduce((s: number, d: IngresosDiaSemanaViewDto) => s + Number(d.ingresosTotales), 0).toFixed(2)}
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      {todayInvoices.length} facturas generadas
+                      {ingresosDiaSemana.reduce((s: number, d: IngresosDiaSemanaViewDto) => s + Number(d.totalPagos), 0)} pagos registrados
                     </p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm">Pedidos Completados</CardTitle>
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{completedOrders}</div>
-                    <p className="text-xs text-muted-foreground">
-                      {paidOrders} pagados
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm">Pedidos Pendientes</CardTitle>
+                    <CardTitle className="text-sm">Total Pedidos</CardTitle>
                     <ShoppingCart className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{pendingOrders}</div>
+                    <div className="text-2xl font-bold">
+                      {pedidosPorDia.reduce((s: number, d: PedidosPorDiaViewDto) => s + Number(d.totalPedidos), 0)}
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      En proceso
+                      ${pedidosPorDia.reduce((s: number, d: PedidosPorDiaViewDto) => s + Number(d.ingresos), 0).toFixed(2)} generados
                     </p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm">Productos Bajo Stock</CardTitle>
-                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                    <CardTitle className="text-sm">Pedidos Activos</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{lowStockProducts.length}</div>
+                    <div className="text-2xl font-bold">{pedidosActivos.length}</div>
+                    <p className="text-xs text-muted-foreground">En curso ahora</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm">Cuentas Divididas</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {detalleCuentaMesa.filter((c: DetalleCuentaMesaViewDto) => c.cuentaDividida !== 'No').length}
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      Requieren reabastecimiento
+                      de {detalleCuentaMesa.length} cuentas totales
                     </p>
                   </CardContent>
                 </Card>
               </div>
 
-              {lowStockProducts.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Alertas de Inventario</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {lowStockProducts.map((product) => (
-                        <div key={product.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                            <div>
-                              <p className="font-semibold">{product.name}</p>
-                              <p className="text-sm text-gray-600">{product.category}</p>
-                            </div>
-                          </div>
-                          <Badge className="bg-yellow-100 text-yellow-800">
-                            Stock: {product.stock}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {/* Detail sub-tabs */}
+              <Tabs defaultValue="ingresos-semana">
+                <TabsList>
+                  <TabsTrigger value="ingresos-semana">Ingresos por Día</TabsTrigger>
+                  <TabsTrigger value="productos-vendidos">Productos Más Vendidos</TabsTrigger>
+                </TabsList>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Rendimiento de Meseros (Hoy)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {waiters.filter(w => w.active).map((waiter) => {
-                      const waiterOrders = todayOrders.filter(o => o.waiterId === waiter.id);
-                      const waiterRevenue = todayInvoices
-                        .filter(inv => {
-                          const order = orders.find(o => o.id === inv.orderId);
-                          return order?.waiterId === waiter.id;
-                        })
-                        .reduce((sum, inv) => sum + inv.total, 0);
+                <TabsContent value="ingresos-semana">
+                  <Card className="mt-4">
+                    <CardContent className="p-0">
+                      {ingresosDiaSemana.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">Sin datos disponibles</p>
+                      ) : (
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-3 font-medium">Día</th>
+                              <th className="text-right p-3 font-medium">Pagos</th>
+                              <th className="text-right p-3 font-medium">Ingresos Totales</th>
+                              <th className="text-right p-3 font-medium">Promedio por Pago</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ingresosDiaSemana.map((row: IngresosDiaSemanaViewDto, i: number) => (
+                              <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                                <td className="p-3 font-medium">{row.diaSemana}</td>
+                                <td className="p-3 text-right">{row.totalPagos}</td>
+                                <td className="p-3 text-right font-bold">${Number(row.ingresosTotales).toFixed(2)}</td>
+                                <td className="p-3 text-right">${Number(row.promedioPago).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
 
-                      return (
-                        <div key={waiter.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div>
-                            <p className="font-semibold">{waiter.name}</p>
-                            <p className="text-sm text-gray-600">
-                              {waiterOrders.length} pedidos - {getAssignedTables(waiter.id).length} mesas
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-green-600">${waiterRevenue.toFixed(2)}</p>
-                            <p className="text-xs text-gray-600">Ingresos generados</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
+                <TabsContent value="productos-vendidos">
+                  <Card className="mt-4">
+                    <CardContent className="p-0">
+                      {productosMasVendidos.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">Sin datos disponibles</p>
+                      ) : (
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-3 font-medium">Producto</th>
+                              <th className="text-left p-3 font-medium">Tipo</th>
+                              <th className="text-right p-3 font-medium">Vendidos</th>
+                              <th className="text-right p-3 font-medium">Ingresos</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {productosMasVendidos.map((row: ProductosMasVendidosViewDto, i: number) => (
+                              <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                                <td className="p-3 font-medium">{row.nombre}</td>
+                                <td className="p-3">{row.tipo}</td>
+                                <td className="p-3 text-right font-bold">{row.totalVendido}</td>
+                                <td className="p-3 text-right">${Number(row.ingresos).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
             </div>
           </TabsContent>
 
           <TabsContent value="orders">
             <div className="space-y-4">
-              <h2>Pedidos de Hoy</h2>
+              <h2>Pedidos</h2>
 
-              {todayOrders.length === 0 ? (
-                <Card>
-                  <CardContent className="py-8 text-center text-gray-500">
-                    No hay pedidos registrados hoy
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-3">
-                  {[...todayOrders].reverse().map((order) => (
-                    <Card key={order.id}>
-                      <CardHeader>
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <CardTitle className="text-base">
-                              Pedido #{order.id.toString().slice(-6)}
-                            </CardTitle>
-                            <p className="text-sm text-gray-600 mt-1">
-                              Mesa {getTableNumber(order.tableId)} - {getWaiterName(order.waiterId)}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {new Date(order.createdAt).toLocaleTimeString()}
-                            </p>
+              <Tabs defaultValue="pedidos-dia">
+                <TabsList>
+                  <TabsTrigger value="pedidos-dia">Pedidos por Día</TabsTrigger>
+                  <TabsTrigger value="cuentas-mesa">Cuentas por Mesa</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="pedidos-dia">
+                  <Card className="mt-4">
+                    <CardContent className="p-0">
+                      {pedidosPorDia.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">Sin datos disponibles</p>
+                      ) : (
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-3 font-medium">Fecha</th>
+                              <th className="text-right p-3 font-medium">Pedidos</th>
+                              <th className="text-right p-3 font-medium">Ingresos</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pedidosPorDia.map((row: PedidosPorDiaViewDto, i: number) => (
+                              <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                                <td className="p-3">{row.fecha}</td>
+                                <td className="p-3 text-right font-bold">{row.totalPedidos}</td>
+                                <td className="p-3 text-right">${Number(row.ingresos).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="cuentas-mesa">
+                  <div className="mt-4 space-y-4">
+                    {detalleCuentaMesa.length === 0 ? (
+                      <Card>
+                        <CardContent className="py-8 text-center text-gray-500">Sin datos disponibles</CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardContent className="p-0">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b bg-muted/50">
+                                  <th className="text-left p-3 font-medium">Cuenta</th>
+                                  <th className="text-left p-3 font-medium">Mesa</th>
+                                  <th className="text-left p-3 font-medium">Productos</th>
+                                  <th className="text-right p-3 font-medium">Subtotal</th>
+                                  <th className="text-right p-3 font-medium">IVA</th>
+                                  <th className="text-right p-3 font-medium">Total</th>
+                                  <th className="text-left p-3 font-medium">Fecha</th>
+                                  <th className="text-left p-3 font-medium">Dividida</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {detalleCuentaMesa.map((row: DetalleCuentaMesaViewDto, i: number) => (
+                                  <tr
+                                    key={i}
+                                    className={`border-b last:border-0 cursor-pointer hover:bg-muted/30 ${selectedMesaForDetalle === row.numeroMesa ? 'bg-blue-50' : ''}`}
+                                    onClick={() => setSelectedMesaForDetalle(selectedMesaForDetalle === row.numeroMesa ? null : row.numeroMesa)}
+                                  >
+                                    <td className="p-3">#{row.idCuenta}</td>
+                                    <td className="p-3">{row.numeroMesa}</td>
+                                    <td className="p-3 max-w-xs truncate" title={row.resumenProductos}>{row.resumenProductos}</td>
+                                    <td className="p-3 text-right">${Number(row.subtotal).toFixed(2)}</td>
+                                    <td className="p-3 text-right">${Number(row.impuestos).toFixed(2)}</td>
+                                    <td className="p-3 text-right font-bold">${Number(row.total).toFixed(2)}</td>
+                                    <td className="p-3">{new Date(row.fecha).toLocaleString()}</td>
+                                    <td className="p-3">
+                                      <Badge className={row.cuentaDividida !== 'No' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}>
+                                        {row.cuentaDividida}
+                                      </Badge>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
-                          <div className="flex gap-2 flex-col items-end">
-                            <Badge
-                              className={
-                                order.status === 'pending'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : order.status === 'completed'
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-gray-100 text-gray-800'
-                              }
-                            >
-                              {order.status === 'pending' ? 'Pendiente' : order.status === 'completed' ? 'Completado' : 'Cancelado'}
-                            </Badge>
-                            <Badge
-                              className={
-                                order.paid
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-red-100 text-red-800'
-                              }
-                            >
-                              {order.paid ? 'Pagado' : 'Sin Pagar'}
-                            </Badge>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          {order.items.map((item, idx) => (
-                            <div key={idx} className="flex justify-between text-sm">
-                              <span>{item.quantity}x {getProductName(item.productId)}</span>
-                              <span>${(item.price * item.quantity).toFixed(2)}</span>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {selectedMesaForDetalle !== null && (() => {
+                      const detalles = detallePedidoCompleto.filter(d => d.mesa === selectedMesaForDetalle);
+                      return (
+                        <Card>
+                          <CardHeader>
+                            <div className="flex justify-between items-center">
+                              <CardTitle className="text-base">Detalle de pedidos — Mesa {selectedMesaForDetalle}</CardTitle>
+                              <Button size="sm" variant="outline" onClick={() => setSelectedMesaForDetalle(null)}>
+                                <X className="w-4 h-4" />
+                              </Button>
                             </div>
-                          ))}
-                          <div className="border-t pt-2 flex justify-between font-bold">
-                            <span>Total:</span>
-                            <span>${order.total.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
+                          </CardHeader>
+                          <CardContent className="p-0">
+                            {detalles.length === 0 ? (
+                              <p className="text-center text-gray-500 py-4 text-sm">Sin detalles para esta mesa</p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b bg-muted/50">
+                                      <th className="text-left p-3 font-medium">Pedido</th>
+                                      <th className="text-left p-3 font-medium">Producto</th>
+                                      <th className="text-right p-3 font-medium">Cant.</th>
+                                      <th className="text-right p-3 font-medium">Precio unit.</th>
+                                      <th className="text-right p-3 font-medium">Subtotal</th>
+                                      <th className="text-left p-3 font-medium">Estado</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {detalles.map((row: DetallePedidoCompletoViewDto, i: number) => (
+                                      <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                                        <td className="p-3">#{row.idPedido}</td>
+                                        <td className="p-3">{row.producto}</td>
+                                        <td className="p-3 text-right">{row.cantidad}</td>
+                                        <td className="p-3 text-right">${Number(row.precioUnitario).toFixed(2)}</td>
+                                        <td className="p-3 text-right font-bold">${Number(row.subtotal).toFixed(2)}</td>
+                                        <td className="p-3">
+                                          <Badge className={row.estado === 'Activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                                            {row.estado}
+                                          </Badge>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })()}
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           </TabsContent>
 
@@ -354,52 +502,152 @@ export function AdminModule({
             <div className="space-y-4">
               <h2>Consulta de Inventario</h2>
 
-              {products.map((category) => category).reduce((acc: string[], p) => {
-                if (!acc.includes(p.category)) acc.push(p.category);
-                return acc;
-              }, []).map((category) => (
-                <div key={category} className="space-y-3">
-                  <h3>{category}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {products.filter(p => p.category === category).map((product) => (
-                      <Card key={product.id} className={!product.active ? 'opacity-60' : ''}>
-                        <CardHeader>
-                          <div className="flex justify-between items-start">
-                            <CardTitle className="text-base">{product.name}</CardTitle>
-                            {!product.active && (
-                              <Badge variant="secondary">Inactivo</Badge>
-                            )}
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Precio:</span>
-                            <span className="font-bold">${product.price.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Stock:</span>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold">{product.stock}</span>
-                              {product.stock < 10 && product.active && (
-                                <Badge className="bg-yellow-100 text-yellow-800">Bajo</Badge>
-                              )}
-                              {product.stock === 0 && (
-                                <Badge className="bg-red-100 text-red-800">Agotado</Badge>
-                              )}
-                            </div>
-                          </div>
+              <Tabs defaultValue="bebidas-vendidas">
+                <TabsList>
+                  <TabsTrigger value="bebidas-vendidas">Bebidas alcohólicas más vendidas</TabsTrigger>
+                  <TabsTrigger value="comidas-no-pedidas">Comidas no pedidas</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="bebidas-vendidas">
+                  <div className="mt-4">
+                    {bebidasMasVendidas.length === 0 ? (
+                      <Card>
+                        <CardContent className="py-8 text-center text-gray-500">
+                          No hay datos disponibles
                         </CardContent>
                       </Card>
-                    ))}
+                    ) : (
+                      <Card>
+                        <CardContent className="p-0">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-muted/50">
+                                <th className="text-left p-3 font-medium">Bebida</th>
+                                <th className="text-right p-3 font-medium">Total Vendido</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {bebidasMasVendidas.map((b: BebidaAlcoholicaMasVendidaViewDto, idx: number) => (
+                                <tr key={idx} className="border-b last:border-0 hover:bg-muted/30">
+                                  <td className="p-3">{b.nombre}</td>
+                                  <td className="p-3 text-right font-bold">{b.totalVendido}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
-                </div>
-              ))}
+                </TabsContent>
+
+                <TabsContent value="comidas-no-pedidas">
+                  <div className="mt-4">
+                    {comidasNoPedidas.length === 0 ? (
+                      <Card>
+                        <CardContent className="py-8 text-center text-gray-500">
+                          No hay datos disponibles
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardContent className="p-0">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-muted/50">
+                                <th className="text-left p-3 font-medium">Comida</th>
+                                <th className="text-right p-3 font-medium">Precio</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {comidasNoPedidas.map((c: ComidaNoPedidaViewDto, idx: number) => (
+                                <tr key={idx} className="border-b last:border-0 hover:bg-muted/30">
+                                  <td className="p-3">{c.nombre}</td>
+                                  <td className="p-3 text-right font-bold">${c.precio.toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           </TabsContent>
 
           <TabsContent value="waiters">
             <div className="space-y-6">
-              <h2>Gestión de Meseros</h2>
+              <div className="flex justify-between items-center">
+                <h2>Gestión de Empleados</h2>
+                <Button onClick={() => setIsAddingEmployee(!isAddingEmployee)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar Empleado
+                </Button>
+              </div>
+
+              {isAddingEmployee && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Nuevo Empleado</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div>
+                        <Label>Nombre</Label>
+                        <Input
+                          value={newEmployeeForm.nombre}
+                          onChange={(e) => setNewEmployeeForm({ ...newEmployeeForm, nombre: e.target.value })}
+                          placeholder="Nombre completo"
+                        />
+                      </div>
+                      <div>
+                        <Label>Rol</Label>
+                        <select
+                          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                          value={newEmployeeForm.rol}
+                          onChange={(e) => setNewEmployeeForm({ ...newEmployeeForm, rol: e.target.value as EmpleadoRol })}
+                        >
+                          <option value="Mesero">Mesero</option>
+                          <option value="Bartender">Bartender</option>
+                          <option value="Cajero">Cajero</option>
+                          <option value="Administrador">Administrador</option>
+                        </select>
+                      </div>
+                      <div>
+                        <Label>Fecha de Ingreso</Label>
+                        <Input
+                          type="date"
+                          value={newEmployeeForm.fechaIngreso}
+                          onChange={(e) => setNewEmployeeForm({ ...newEmployeeForm, fechaIngreso: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Estado</Label>
+                        <select
+                          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                          value={newEmployeeForm.estado}
+                          onChange={(e) => setNewEmployeeForm({ ...newEmployeeForm, estado: e.target.value as EmpleadoEstado })}
+                        >
+                          <option value="Activo">Activo</option>
+                          <option value="Inactivo">Inactivo</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleAddEmployee}>
+                        <Save className="w-4 h-4 mr-2" />
+                        Guardar
+                      </Button>
+                      <Button variant="outline" onClick={() => setIsAddingEmployee(false)}>
+                        <X className="w-4 h-4 mr-2" />
+                        Cancelar
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {editingWaiterId !== null && (
                 <Card>
